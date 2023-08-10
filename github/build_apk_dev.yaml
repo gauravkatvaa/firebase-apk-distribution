@@ -1,0 +1,55 @@
+name: Build Dev APK and Release to Firebase
+
+on:
+  push:
+    branches:
+      # Update this branch in every sprint 
+      - sprint-29
+      - feat/docker
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.10.0
+          channel: stable
+          cache: true
+
+      - name: Write environment files to directory
+        run: |
+          echo "${{ secrets.DEV_ENV }}" | base64 --decode > .env_dev
+          echo "${{ secrets.PROD_ENV }}" | base64 --decode > .env_prod
+          echo "${{ secrets.STAGING_ENV }}" | base64 --decode > .env_staging
+          echo "${{ secrets.FIREBASE_TOKEN }}" | base64 --decode > .env_token
+          echo "${{ secrets.DEV_FIREBASE_APP_ID }}" | base64 --decode > .env_app_id
+
+      - name: Build and release script
+        run: |
+           npm install -g firebase-tools@12.2.1
+
+           echo "Firebase tools installed version is..."
+           firebase --version
+
+           TOKEN=$(cat .env_token)
+           APP_ID=$(cat .env_app_id)
+
+           echo "Building development APK file"
+
+           if flutter build apk --flavor development --target lib/main_development.dart; then
+               echo "Build Success"
+               echo "Distributing the development APK File to firebase"
+               firebase --token "$TOKEN" appdistribution:distribute build/app/outputs/flutter-apk/app-development-release.apk --app "$APP_ID" --groups "qa-test"
+
+           else
+               echo "Build Failed"
+
+           fi
